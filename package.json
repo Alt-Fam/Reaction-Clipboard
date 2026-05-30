@@ -1,0 +1,70 @@
+{
+  "name": "reaction-clipboard",
+  "version": "1.0.0",
+  "private": true,
+  "author": "Reaction Clipboard",
+  "description": "Reaction Clipboard",
+  "main": "out/main/index.js",
+  "type": "module",
+  "scripts": {
+    "dev": "electron-vite dev",
+    "typecheck": "tsc --noEmit -p tsconfig.node.json && tsc --noEmit -p tsconfig.web.json",
+    "test": "vitest run",
+    "test:e2e": "npm run build && playwright test",
+    "build": "electron-vite build",
+    "dist:win": "npm run build && node scripts/assemble-windows-app.cjs && node scripts/stamp-windows-exe.cjs && electron-builder --win portable --x64 --prepackaged dist/win-unpacked",
+    "dist:mac": "npm run build && electron-builder --mac dmg --x64 --arm64"
+  },
+  "build": {
+    "appId": "com.reactionclipboard.app",
+    "productName": "Reaction Clipboard",
+    "asar": true,
+    "directories": {
+      "output": "dist",
+      "buildResources": "build"
+    },
+    "files": [
+      "out/**/*",
+      "package.json"
+    ],
+    "extraResources": [
+      {
+        "from": "build/icon.ico",
+        "to": "icon.ico"
+      }
+    ],
+    "win": {
+      "icon": "icon.ico",
+      "target": "portable",
+      "signAndEditExecutable": false,
+      "signExts": [
+        "!.exe"
+      ]
+    },
+    "mac": {
+      "icon": "icon.icns",
+      "target": "dmg",
+      "identity": null,
+      "hardenedRuntime": false
+    },
+    "publish": null
+  },
+  "dependencies": {
+    "react": "19.2.6",
+    "react-dom": "19.2.6",
+    "zod": "4.4.3"
+  },
+  "devDependencies": {
+    "@playwright/test": "1.60.0",
+    "@types/node": "25.9.1",
+    "@types/react": "19.2.15",
+    "@types/react-dom": "19.2.3",
+    "@vitejs/plugin-react": "5.2.0",
+    "electron": "42.3.0",
+    "electron-builder": "26.8.1",
+    "electron-vite": "5.0.0",
+    "typescript": "6.0.3",
+    "vite": "7.3.3",
+    "vitest": "4.1.7"
+  }
+}
