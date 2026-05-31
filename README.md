@@ -29,20 +29,38 @@ The fixed data root is `%APPDATA%\Reaction Clipboard\` on Windows and
 `database.sqlite`, `media/`, and `electron-profile/`. Close the app and remove
 that root to reset it completely.
 
+At runtime, the app writes its SQLite database and SQLite journal files beneath
+that root. Electron profile data, logs, crash dumps, and session data are routed
+beneath `electron-profile/`. Importing media reads the user-selected source file,
+writes a temporary file beneath `media/`, and renames it into a managed copy
+after validation. Deleting an item removes only its managed copy. The Settings
+button can ask the operating system to open the data root in the file browser.
+
 ## Security Model
 
 Reaction Clipboard keeps the renderer offline-only. The renderer CSP denies
 network connections, and the default session blocks remote HTTP, HTTPS,
 WebSocket, navigation, permission, and new-window attempts. Development permits
-loopback Vite assets only. Explicitly dropping a web image downloads that image
-once through a temporary main-process session before local validation.
+loopback Vite assets only.
+
+Explicitly dropping a web image is the runtime network exception. The main
+process downloads that HTTP or HTTPS URL through a separate cache-disabled
+session, follows at most five redirects, rejects responses larger than 100 MB,
+and validates the image signature before offering the local import. The bytes
+are kept in memory until the user saves the item, then written as a managed
+copy. Packaged builds reject obvious localhost, private-network, and link-local
+hostnames. This is a best-effort filter: hostnames are not resolved and checked
+before the request, so it is not complete SSRF protection against a crafted
+hostname that resolves to a local address.
 
 Electron-controlled writable paths are routed beneath the app-owned data root.
-Imports read a user-selected source file and create a managed copy. Deleting an
-item removes only that managed copy. Installers and operating systems may still
-write normal installation metadata, shortcuts, caches, or security records.
-On macOS, Chromium's Keychain-backed browser credential storage is disabled
-because this offline app does not store browser credentials.
+Installers and operating systems may still write normal installation metadata,
+shortcuts, caches, or security records. On macOS, Chromium's Keychain-backed
+browser credential storage is disabled because this offline app does not store
+browser credentials.
+
+Copying an item changes the system clipboard. Opening the data folder asks the
+operating system to launch its file browser for the fixed app-owned data root.
 
 On Windows, copying an animated GIF as a file attachment launches a hidden,
 non-interactive system PowerShell process. It runs a fixed script that places
