@@ -1,12 +1,15 @@
-import { dialog, ipcMain, shell } from 'electron'
+import electron from 'electron'
 import type { ImportMediaInput } from '../shared/types.js'
 import { idSchema, copyItemSchema, createTextSchema, importMediaSchema, renameTagSchema, updateItemSchema } from '../shared/validation.js'
 import { ClipboardAdapter } from './clipboard.js'
 import type { AppPaths } from './paths.js'
 import { Repository } from './repository.js'
 import { StorageService } from './storage.js'
+import { WebMediaDropService } from './web-media.js'
 
-export function registerIpc(repository: Repository, storage: StorageService, clipboard: ClipboardAdapter, paths: AppPaths): void {
+const { dialog, ipcMain, shell } = electron
+
+export function registerIpc(repository: Repository, storage: StorageService, webMedia: WebMediaDropService, clipboard: ClipboardAdapter, paths: AppPaths): void {
   ipcMain.handle('items:list', () => repository.listItems())
   ipcMain.handle('tags:list', () => repository.listTags())
   ipcMain.handle('media:choose', async () => {
@@ -21,11 +24,17 @@ export function registerIpc(repository: Repository, storage: StorageService, cli
     const parsed = parseDroppedInspection(input)
     return storage.inspectDropped(parsed.token, parsed.fileName, parsed.sizeBytes, parsed.header)
   })
+  ipcMain.handle('media:inspect-web', (_event, url: unknown) => webMedia.inspect(parseUrl(url)))
   ipcMain.handle('items:create-text', (_event, input: unknown) => repository.createText(createTextSchema.parse(input)))
   ipcMain.handle('items:import-media', (_event, input: unknown) => repository.importMedia(importMediaSchema.parse(input)))
   ipcMain.handle('items:import-dropped-media', (_event, input: unknown) => {
     const parsed = parseDroppedImport(input)
     return repository.importDroppedMedia(importMediaSchema.parse(parsed), parsed.fileName, parsed.bytes)
+  })
+  ipcMain.handle('items:import-web-media', (_event, input: unknown) => {
+    const parsed = importMediaSchema.parse(input)
+    const media = webMedia.take(parsed)
+    return repository.importDroppedMedia(parsed, media.fileName, media.bytes)
   })
   ipcMain.handle('items:update', (_event, input: unknown) => repository.updateItem(updateItemSchema.parse(input)))
   ipcMain.handle('items:delete', (_event, id: unknown) => repository.deleteItem(idSchema.parse(id)))
@@ -43,6 +52,11 @@ export function registerIpc(repository: Repository, storage: StorageService, cli
 
 function parsePath(value: unknown): string {
   if (typeof value !== 'string' || !value) throw new Error('A selected file path is required.')
+  return value
+}
+
+function parseUrl(value: unknown): string {
+  if (typeof value !== 'string' || !value) throw new Error('A dropped image URL is required.')
   return value
 }
 

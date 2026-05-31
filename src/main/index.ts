@@ -1,4 +1,4 @@
-import { app, BrowserWindow, net, protocol } from 'electron'
+import electron from 'electron'
 import path from 'node:path'
 import { pathToFileURL } from 'node:url'
 import { ClipboardAdapter } from './clipboard.js'
@@ -7,6 +7,12 @@ import { configureAppPaths } from './paths.js'
 import { Repository } from './repository.js'
 import { lockDownSession, lockDownWindow } from './security.js'
 import { StorageService } from './storage.js'
+import { WebMediaDropService } from './web-media.js'
+
+const { app, BrowserWindow, net, protocol } = electron
+
+// The offline app stores no browser credentials, so avoid Chromium's macOS Keychain prompt.
+if (process.platform === 'darwin') app.commandLine.appendSwitch('use-mock-keychain')
 
 protocol.registerSchemesAsPrivileged([
   { scheme: 'reaction-media', privileges: { standard: true, secure: true, supportFetchAPI: true, corsEnabled: true } }
@@ -18,7 +24,7 @@ let repository: Repository
 
 app.whenReady().then(() => {
   repository = new Repository(paths.database, storage)
-  registerIpc(repository, storage, new ClipboardAdapter(repository), paths)
+  registerIpc(repository, storage, new WebMediaDropService(storage), new ClipboardAdapter(repository), paths)
   lockDownSession()
   protocol.handle('reaction-media', async (request) => {
     const url = new URL(request.url)

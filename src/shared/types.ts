@@ -63,6 +63,7 @@ export interface ReactionClipboardApi {
   listTags(): Promise<Tag[]>
   chooseMediaFile(): Promise<MediaSelection | null>
   inspectDroppedFile(file: File): Promise<MediaSelection>
+  inspectDroppedUrl(url: string): Promise<MediaSelection>
   createText(input: CreateTextInput): Promise<Item>
   importMedia(input: ImportMediaInput): Promise<Item>
   updateItem(input: UpdateItemInput): Promise<Item>

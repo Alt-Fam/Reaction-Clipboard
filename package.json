@@ -13,7 +13,7 @@
     "test:e2e": "npm run build && playwright test",
     "build": "electron-vite build",
     "dist:win": "npm run build && node scripts/assemble-windows-app.cjs && node scripts/stamp-windows-exe.cjs && electron-builder --win portable --x64 --prepackaged dist/win-unpacked",
-    "dist:mac": "npm run build && electron-builder --mac dmg --x64 --arm64"
+    "dist:mac": "npm run build && electron-builder --mac dir --universal"
   },
   "build": {
     "appId": "com.reactionclipboard.app",
@@ -43,8 +43,8 @@
     },
     "mac": {
       "icon": "icon.icns",
-      "target": "dmg",
-      "identity": null,
+      "target": "dir",
+      "identity": "-",
       "hardenedRuntime": false
     },
     "publish": null

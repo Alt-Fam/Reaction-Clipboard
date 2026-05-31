@@ -3,6 +3,7 @@ import { filterItems } from '../shared/search'
 import type { Item, MediaSelection, Tag, TypeFilter } from '../shared/types'
 
 type Panel = 'add' | 'tags' | 'settings' | null
+type DroppedMedia = { file: File } | { url: string }
 
 export function App() {
   const [items, setItems] = useState<Item[]>([])
@@ -16,6 +17,7 @@ export function App() {
   const [toast, setToast] = useState('')
   const [error, setError] = useState('')
   const [copyingId, setCopyingId] = useState<string | null>(null)
+  const [pendingDrop, setPendingDrop] = useState<DroppedMedia | null>(null)
 
   const refresh = async () => {
     try {
@@ -32,11 +34,35 @@ export function App() {
     const timeout = window.setTimeout(() => setToast(''), 2200)
     return () => window.clearTimeout(timeout)
   }, [toast])
+  useEffect(() => {
+    const allowDrop = (event: DragEvent) => {
+      if (!hasDroppableMedia(event.dataTransfer)) return
+      event.preventDefault()
+      if (event.dataTransfer) event.dataTransfer.dropEffect = 'copy'
+    }
+    const dropFile = (event: DragEvent) => {
+      if (!hasMedia(event.dataTransfer)) return
+      event.preventDefault()
+      const file = firstFile(event.dataTransfer)
+      const url = firstWebUrl(event.dataTransfer)
+      if (!file && !url) return
+      setPendingDrop(file ? { file } : { url: url! })
+      setPanel('add')
+    }
+    document.addEventListener('dragover', allowDrop)
+    document.addEventListener('drop', dropFile)
+    return () => {
+      document.removeEventListener('dragover', allowDrop)
+      document.removeEventListener('drop', dropFile)
+    }
+  }, [])
 
   const visibleItems = useMemo(() => filterItems(items, query, type, selectedTags), [items, query, type, selectedTags])
   const filtered = Boolean(query || type !== 'all' || selectedTags.length)
   const clearFilters = () => { setQuery(''); setType('all'); setSelectedTags([]) }
   const toggleTag = (name: string) => setSelectedTags((current) => current.includes(name) ? current.filter((tag) => tag !== name) : [...current, name])
+  const openAdd = () => { setPendingDrop(null); setPanel('add') }
+  const closeAdd = () => { setPendingDrop(null); setPanel(null) }
   const removeItem = async (item: Item) => {
     await attempt(async () => {
       await window.reactionClipboard.deleteItem(item.id)
@@ -58,7 +84,7 @@ export function App() {
   return <main>
     <header>
       <div><p className="eyebrow">Local reaction library</p><h1>Reaction Clipboard</h1></div>
-      <nav><button className="quiet" onClick={() => setPanel('tags')}>Manage tags</button><button className="quiet" onClick={() => setPanel('settings')}>Settings</button><button onClick={() => setPanel('add')}>Add Item</button></nav>
+      <nav><button className="quiet" onClick={() => setPanel('tags')}>Manage tags</button><button className="quiet" onClick={() => setPanel('settings')}>Settings</button><button onClick={openAdd}>Add Item</button></nav>
     </header>
     <section className="controls">
       <input autoFocus aria-label="Search" placeholder="Search names and tags" value={query} onChange={(event) => setQuery(event.target.value)} />
@@ -66,10 +92,10 @@ export function App() {
       {filtered && <button className="link" onClick={clearFilters}>Clear filters</button>}
     </section>
     {tags.length > 0 && <section className="chips">{tags.map((tag) => <button className={selectedTags.includes(tag.name) ? 'chip active' : 'chip'} key={tag.id} onClick={() => toggleTag(tag.name)}>{tag.name}</button>)}</section>}
-    {items.length === 0 ? <Empty title="Your reaction library is empty" action="Add your first item" onClick={() => setPanel('add')} /> :
+    {items.length === 0 ? <Empty title="Your reaction library is empty" action="Add your first item" onClick={openAdd} /> :
       visibleItems.length === 0 ? <Empty title="No matching items" action="Clear filters" onClick={clearFilters} /> :
       <section className="grid">{visibleItems.map((item) => <Card key={item.id} item={item} copying={copyingId === item.id} onCopy={() => copy(item)} onEdit={() => setEditing(item)} onDelete={() => setDeleting(item)} />)}</section>}
-    {panel === 'add' && <ItemForm title="Add item" tags={tags} onClose={() => setPanel(null)} onSaved={async () => { await refresh(); setPanel(null) }} />}
+    {panel === 'add' && <ItemForm title="Add item" tags={tags} initialMediaFile={pendingDrop} onClose={closeAdd} onSaved={async () => { await refresh(); closeAdd() }} />}
     {editing && <ItemForm title="Edit item" tags={tags} item={editing} onClose={() => setEditing(null)} onSaved={async () => { await refresh(); setEditing(null) }} />}
     {deleting && <DeleteItemDialog item={deleting} onClose={() => setDeleting(null)} onConfirm={() => void removeItem(deleting)} />}
     {panel === 'tags' && <TagPanel tags={tags} onClose={() => setPanel(null)} onChanged={refresh} />}
@@ -103,7 +129,7 @@ function VisibleGif({ item }: { item: Item }) {
   return <div ref={ref} className="gif-slot">{visible && <img src={item.mediaUrl} alt="" />}</div>
 }
 
-function ItemForm({ title, tags, item, onClose, onSaved }: { title: string; tags: Tag[]; item?: Item; onClose(): void; onSaved(): void }) {
+function ItemForm({ title, tags, item, initialMediaFile, onClose, onSaved }: { title: string; tags: Tag[]; item?: Item; initialMediaFile?: DroppedMedia | null; onClose(): void; onSaved(): void }) {
   const [mode, setMode] = useState<'text' | 'media'>(item?.type === 'text' || !item ? 'text' : 'media')
   const [name, setName] = useState(item?.name || '')
   const [text, setText] = useState(item?.text || '')
@@ -128,13 +154,26 @@ function ItemForm({ title, tags, item, onClose, onSaved }: { title: string; tags
     setConfirmLargeFile(false)
     setMedia(await window.reactionClipboard.chooseMediaFile())
   }
+  const inspectDroppedFile = async (file: File) => {
+    setConfirmLargeFile(false)
+    setMedia(await window.reactionClipboard.inspectDroppedFile(file))
+  }
+  const inspectDroppedUrl = async (url: string) => {
+    setConfirmLargeFile(false)
+    setMedia(await window.reactionClipboard.inspectDroppedUrl(url))
+  }
+  useEffect(() => {
+    if (!initialMediaFile) return
+    setMode('media')
+    void attempt(() => 'file' in initialMediaFile ? inspectDroppedFile(initialMediaFile.file) : inspectDroppedUrl(initialMediaFile.url), setError)
+  }, [initialMediaFile])
   const dropFile = async (event: React.DragEvent) => {
     event.preventDefault()
+    event.stopPropagation()
     const file = event.dataTransfer.files[0]
-    if (file) await attempt(async () => {
-      setConfirmLargeFile(false)
-      setMedia(await window.reactionClipboard.inspectDroppedFile(file))
-    }, setError)
+    const url = firstWebUrl(event.dataTransfer)
+    if (file) await attempt(() => inspectDroppedFile(file), setError)
+    else if (url) await attempt(() => inspectDroppedUrl(url), setError)
   }
   const save = async (event: FormEvent) => {
     event.preventDefault()
@@ -214,6 +253,35 @@ async function attempt(action: () => Promise<void>, setError: (value: string) =>
 }
 function message(reason: unknown): string { return reason instanceof Error ? reason.message : String(reason) }
 function label(type: TypeFilter): string { return ({ all: 'All', text: 'Text', image: 'Images', gif: 'GIFs' })[type] }
+function hasMedia(dataTransfer: DataTransfer | null): boolean {
+  if (!dataTransfer) return false
+  const types = Array.from(dataTransfer.types)
+  return types.includes('Files') || types.includes('text/uri-list') || types.includes('text/html') || types.includes('text/plain')
+}
+function hasDroppableMedia(dataTransfer: DataTransfer | null): boolean {
+  if (!dataTransfer) return false
+  const types = Array.from(dataTransfer.types)
+  return types.includes('Files') || types.includes('text/uri-list') || types.includes('text/html')
+}
+function firstFile(dataTransfer: DataTransfer | null): File | null {
+  if (!dataTransfer) return null
+  return dataTransfer.files[0] || Array.from(dataTransfer.items).find((item) => item.kind === 'file')?.getAsFile() || null
+}
+function firstWebUrl(dataTransfer: DataTransfer | null): string | null {
+  if (!dataTransfer) return null
+  const html = dataTransfer.getData('text/html')
+  if (html) {
+    const source = new DOMParser().parseFromString(html, 'text/html').querySelector('img')?.src
+    if (isWebUrl(source)) return source
+  }
+  const uri = dataTransfer.getData('text/uri-list').split(/\r?\n/).find((line) => line && !line.startsWith('#'))
+  if (isWebUrl(uri)) return uri
+  const plainText = dataTransfer.getData('text/plain').trim()
+  return isWebUrl(plainText) ? plainText : null
+}
+function isWebUrl(value: string | undefined): value is string {
+  try { return Boolean(value && ['http:', 'https:'].includes(new URL(value).protocol)) } catch { return false }
+}
 
 async function createFallbackPng(mediaUrl?: string): Promise<string | undefined> {
   if (!mediaUrl) return undefined

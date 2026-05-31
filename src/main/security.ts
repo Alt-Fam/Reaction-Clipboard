@@ -1,5 +1,7 @@
 import type { BrowserWindow } from 'electron'
-import { session } from 'electron'
+import electron from 'electron'
+
+const { session } = electron
 
 export function lockDownSession(): void {
   const current = session.defaultSession

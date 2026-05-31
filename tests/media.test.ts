@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { detectMediaFormat, LARGE_FILE_BYTES } from '../src/shared/media.js'
+import { detectMediaFormat, detectMediaSignature, LARGE_FILE_BYTES, preferredExtensionFor } from '../src/shared/media.js'
 import { isPathInside } from '../src/main/path-containment.js'
 
 describe('media validation', () => {
@@ -8,6 +8,7 @@ describe('media validation', () => {
     expect(detectMediaFormat('a.gif', Uint8Array.from(Buffer.from('GIF89a')))).toBe('gif')
   })
   it('rejects extension spoofing', () => expect(() => detectMediaFormat('a.png', Uint8Array.from(Buffer.from('GIF89a')))).toThrow(/Unsupported/))
+  it('detects a signature without a file extension', () => expect(preferredExtensionFor(detectMediaSignature(Uint8Array.from(Buffer.from('GIF89a')))!)).toBe('.gif'))
   it('defines the warning boundary above 100 MB', () => expect(LARGE_FILE_BYTES).toBe(104_857_600))
 })
 

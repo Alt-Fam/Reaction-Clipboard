@@ -2,6 +2,7 @@ import { contextBridge, ipcRenderer, webUtils } from 'electron'
 import type { ReactionClipboardApi } from '../shared/types.js'
 
 const droppedFiles = new Map<string, File>()
+const droppedWebUrls = new Set<string>()
 
 const api: ReactionClipboardApi = {
   listItems: () => ipcRenderer.invoke('items:list'),
@@ -19,8 +20,14 @@ const api: ReactionClipboardApi = {
       header: new Uint8Array(await file.slice(0, 16).arrayBuffer())
     })
   },
+  inspectDroppedUrl: async (url) => {
+    const selected = await ipcRenderer.invoke('media:inspect-web', url)
+    droppedWebUrls.add(selected.sourcePath)
+    return selected
+  },
   createText: (input) => ipcRenderer.invoke('items:create-text', input),
   importMedia: async (input) => {
+    if (droppedWebUrls.delete(input.sourcePath)) return ipcRenderer.invoke('items:import-web-media', input)
     const file = droppedFiles.get(input.sourcePath)
     if (!file) return ipcRenderer.invoke('items:import-media', input)
     droppedFiles.delete(input.sourcePath)
